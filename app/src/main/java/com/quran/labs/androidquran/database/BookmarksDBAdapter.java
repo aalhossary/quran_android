@@ -1,8 +1,5 @@
 package com.quran.labs.androidquran.database;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -10,14 +7,23 @@ import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.Log;
 import android.widget.Checkable;
-
 import com.quran.labs.androidquran.database.BookmarksDBHelper.BookmarkTagTable;
 import com.quran.labs.androidquran.database.BookmarksDBHelper.BookmarksTable;
 import com.quran.labs.androidquran.database.BookmarksDBHelper.TagsTable;
 
-public class BookmarksDBAdapter {
+import java.util.ArrayList;
+import java.util.List;
 
+public class BookmarksDBAdapter {
+   private static final String TAG =
+           "com.quran.labs.androidquran.database.BookmarksDBAdapter";
+
+   public static final int SORT_DATE_ADDED = 0;
+   public static final int SORT_LOCATION = 1;
+   public static final int SORT_ALPHABETICAL = 2;
+   
 	private SQLiteDatabase mDb;
 	private BookmarksDBHelper mDbHelper;
 	
@@ -38,16 +44,30 @@ public class BookmarksDBAdapter {
       }
 	}
 
-   public List<Bookmark> getBookmarks(boolean loadTags){
+	public List<Bookmark> getBookmarks(boolean loadTags){
+	   return getBookmarks(loadTags, SORT_DATE_ADDED);
+	}
+
+   public List<Bookmark> getBookmarks(boolean loadTags, int sortOrder){
       if (mDb == null){
          open();
          if (mDb == null){ return null; }
       }
 
+      String orderBy = null;
+      switch (sortOrder) {
+      case SORT_LOCATION:
+         orderBy = BookmarksTable.PAGE + " ASC, "
+               + BookmarksTable.SURA + " ASC, " + BookmarksTable.AYAH + " ASC";
+         break;
+      case SORT_DATE_ADDED:
+      default:
+         orderBy = BookmarksTable.ADDED_DATE + " DESC";
+         break;
+      }
       List<Bookmark> bookmarks = null;
       Cursor cursor = mDb.query(BookmarksTable.TABLE_NAME,
-              null, null, null, null, null,
-              BookmarksTable.ADDED_DATE + " DESC");
+              null, null, null, null, null, orderBy);
       if (cursor != null){
          bookmarks = new ArrayList<Bookmark>();
          while (cursor.moveToNext()){
@@ -131,8 +151,9 @@ public class BookmarksDBAdapter {
       
       Cursor cursor = mDb.query(BookmarksTable.TABLE_NAME,
               null, BookmarksTable.PAGE + "=" + page + " AND " +
-              BookmarksTable.SURA + (sura==null?" IS NULL":"="+sura) + " AND " +
-              BookmarksTable.AYAH + (ayah==null?" IS NULL":"="+ayah), null, null, null, null);
+              BookmarksTable.SURA + (sura == null? " IS NULL" : "=" + sura) +
+              " AND " + BookmarksTable.AYAH +
+              (ayah == null?" IS NULL" : "=" + ayah), null, null, null, null);
       if (cursor.moveToFirst()){
          return cursor.getLong(0);
       }
@@ -152,10 +173,6 @@ public class BookmarksDBAdapter {
    
    public long addBookmark(int page){
       return addBookmark(null, null, page);
-   }
-
-   public long addBookmark(int sura, int ayah, int page){
-      return addBookmark(sura, ayah, page);
    }
 
    public long addBookmarkIfNotExists(Integer sura, Integer ayah, int page){
@@ -193,15 +210,28 @@ public class BookmarksDBAdapter {
    }
 
    public List<Tag> getTags(){
+      return getTags(SORT_ALPHABETICAL);
+   }
+
+   public List<Tag> getTags(int sortOrder){
       if (mDb == null){
          open();
          if (mDb == null){ return null; }
       }
 
+      String orderBy = null;
+      switch (sortOrder) {
+      case SORT_DATE_ADDED:
+         orderBy = TagsTable.ADDED_DATE + " DESC";
+         break;
+      case SORT_ALPHABETICAL:
+      default:
+         orderBy = TagsTable.NAME + " ASC";
+         break;
+      }
       List<Tag> tags = null;
       Cursor cursor = mDb.query(TagsTable.TABLE_NAME,
-              null, null, null, null, null,
-              TagsTable.NAME + " ASC");
+              null, null, null, null, null, orderBy);
       if (cursor != null){
          tags = new ArrayList<Tag>();
          while (cursor.moveToNext()){
@@ -245,9 +275,11 @@ public class BookmarksDBAdapter {
          if (mDb == null){ return false; }
       }
 
-      boolean removed = mDb.delete(TagsTable.TABLE_NAME, TagsTable.ID + "=" + tagId, null) == 1;
+      boolean removed = mDb.delete(TagsTable.TABLE_NAME,
+              TagsTable.ID + "=" + tagId, null) == 1;
       if (removed) {
-    	  mDb.delete(BookmarkTagTable.TABLE_NAME, BookmarkTagTable.TAG_ID + "=" + tagId, null);
+    	  mDb.delete(BookmarkTagTable.TABLE_NAME,
+                 BookmarkTagTable.TAG_ID + "=" + tagId, null);
       }
       
       return removed;
@@ -261,7 +293,8 @@ public class BookmarksDBAdapter {
       
       Cursor cursor = mDb.query(BookmarkTagTable.TABLE_NAME, null,
             BookmarkTagTable.BOOKMARK_ID + "=" + bookmarkId + " AND "
-                  + BookmarkTagTable.TAG_ID + "=" + tagId, null, null, null, null);
+                  + BookmarkTagTable.TAG_ID + "=" + tagId,
+              null, null, null, null);
       if (cursor.moveToFirst()){
          return cursor.getLong(0);
       }
@@ -273,22 +306,30 @@ public class BookmarksDBAdapter {
          open();
          if (mDb == null){ return; }
       }
-      
-      // TODO write efficient SQL instead of this silly loop
-      for (Tag t : tags) {
-         if (t.mId < 0)
-            continue;
-         long id = getBookmarkTagId(bookmarkId, t.mId);
-         if (id < 0 && t.isChecked()) {
-            ContentValues values = new ContentValues();
-            values.put(BookmarkTagTable.BOOKMARK_ID, bookmarkId);
-            values.put(BookmarkTagTable.TAG_ID, t.mId);
-            id = mDb.insert(BookmarkTagTable.TABLE_NAME, null, values);
-         } else if (id >= 0 && !t.isChecked()) {
-            mDb.delete(BookmarkTagTable.TABLE_NAME,
-                  BookmarkTagTable.ID + "=" + id, null);
+
+      mDb.beginTransaction();
+      try {
+         for (Tag t : tags){
+            if (t.mId < 0){ continue; }
+            if (t.isChecked()){
+               ContentValues values = new ContentValues();
+               values.put(BookmarkTagTable.BOOKMARK_ID, bookmarkId);
+               values.put(BookmarkTagTable.TAG_ID, t.mId);
+               mDb.replace(BookmarkTagTable.TABLE_NAME, null, values);
+            }
+            else {
+               mDb.delete(BookmarkTagTable.TABLE_NAME,
+                       BookmarkTagTable.BOOKMARK_ID + "=" + bookmarkId +
+                       " AND " + BookmarkTagTable.TAG_ID + "=" + t.mId, null);
+            }
          }
       }
+      catch (Exception e){
+         Log.d(TAG, "exception in tagBookmark", e);
+      }
+
+      mDb.setTransactionSuccessful();
+      mDb.endTransaction();
    }
    
    public long tagBookmark(long bookmarkId, long tagId) {
@@ -296,15 +337,11 @@ public class BookmarksDBAdapter {
          open();
          if (mDb == null){ return -1; }
       }
-      
-      long id = getBookmarkTagId(bookmarkId, tagId);
-      if (id < 0) {
-         ContentValues values = new ContentValues();
-         values.put(BookmarkTagTable.BOOKMARK_ID, bookmarkId);
-         values.put(BookmarkTagTable.TAG_ID, tagId);
-         id = mDb.insert(BookmarkTagTable.TABLE_NAME, null, values);
-      }
-      return id;
+
+      ContentValues values = new ContentValues();
+      values.put(BookmarkTagTable.BOOKMARK_ID, bookmarkId);
+      values.put(BookmarkTagTable.TAG_ID, tagId);
+      return mDb.replace(BookmarkTagTable.TABLE_NAME, null, values);
    }
    
    public void untagBookmark(long bookmarkId, long tagId) {
@@ -379,7 +416,8 @@ public class BookmarksDBAdapter {
          mChecked = parcel.readByte() == 1;
       }
       
-      public static final Parcelable.Creator CREATOR = new Parcelable.Creator() {
+      public static final Parcelable.Creator<Tag> CREATOR =
+              new Parcelable.Creator<Tag>() {
          public Tag createFromParcel(Parcel in) {
             return new Tag(in);
          }
@@ -398,7 +436,8 @@ public class BookmarksDBAdapter {
       public long mTimestamp;
       public List<Tag> mTags;
 
-      public Bookmark(long id, Integer sura, Integer ayah, int page, long timestamp){
+      public Bookmark(long id, Integer sura, Integer ayah,
+                      int page, long timestamp){
          mId = id;
          mSura = sura;
          mAyah = ayah;

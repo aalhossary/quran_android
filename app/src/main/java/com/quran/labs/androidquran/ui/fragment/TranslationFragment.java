@@ -2,6 +2,7 @@ package com.quran.labs.androidquran.ui.fragment;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.PaintDrawable;
@@ -34,6 +35,7 @@ public class TranslationFragment extends SherlockFragment {
    private static final String PAGE_NUMBER_EXTRA = "pageNumber";
 
    private int mPageNumber;
+   private boolean mIsPaused;
    private TranslationView mTranslationView;
    private PaintDrawable mLeftGradient, mRightGradient = null;
 
@@ -48,6 +50,7 @@ public class TranslationFragment extends SherlockFragment {
    @Override
    public void onCreate(Bundle savedInstanceState){
       super.onCreate(savedInstanceState);
+      mIsPaused = false;
       mPageNumber = getArguments() != null?
               getArguments().getInt(PAGE_NUMBER_EXTRA) : -1;
       int width = getActivity().getWindowManager()
@@ -67,13 +70,14 @@ public class TranslationFragment extends SherlockFragment {
 
       SharedPreferences prefs = PreferenceManager
               .getDefaultSharedPreferences(getActivity());
-      
-      if (!prefs.getBoolean(getResources().getString(R.string.prefs_new_background), true)) {
-    	  view.setBackgroundColor(getResources().getColor(R.color.page_background));
+
+      Resources res = getResources();
+      if (!prefs.getBoolean(Constants.PREF_USE_NEW_BACKGROUND, true)) {
+    	  view.setBackgroundColor(res.getColor(R.color.page_background));
       }
-      if (prefs.getBoolean(Constants.PREF_NIGHT_MODE, false)){ 
-    	  view.setBackgroundColor(Color.BLACK); 
-	  }
+      if (prefs.getBoolean(Constants.PREF_NIGHT_MODE, false)){
+    	  view.setBackgroundColor(Color.BLACK);
+	   }
 
       int lineImageId = R.drawable.dark_line;
       int leftBorderImageId = R.drawable.border_left;
@@ -118,10 +122,29 @@ public class TranslationFragment extends SherlockFragment {
 
       String database = prefs.getString(
               Constants.PREF_ACTIVE_TRANSLATION, null);
+      refresh(database);
+      return view;
+   }
+
+   @Override
+   public void onResume() {
+      super.onResume();
+      if (mIsPaused){
+         mTranslationView.refresh();
+      }
+      mIsPaused = false;
+   }
+
+   @Override
+   public void onPause() {
+      mIsPaused = true;
+      super.onPause();
+   }
+
+   public void refresh(String database){
       if (database != null){
          new TranslationTask(database).execute(mPageNumber);
       }
-      return view;
    }
 
    class TranslationTask extends AsyncTask<Integer, Void, List<QuranAyah>> {

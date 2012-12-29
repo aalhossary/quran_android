@@ -84,9 +84,11 @@ this time, especially since mvn central has an older version of v4 support.
 
 **version 2.2.0 (in development)**
 
+- fast switching between translations [\#218](https://github.com/ahmedre/quran_android/issues/218)
+- upgrade process for translations
 - move to maven
 - migrate audio files to `/sdcard/quran_android/audio` instead of temp app directory
-- bookmarks changes (still in progress)
+- bookmarks changes
 - exposed an intent to allow launching Quran directly to a
   page/verse - [\#183](https://github.com/ahmedre/quran_android/issues/183)
 - navigation using volume keys - [\#172](https://github.com/ahmedre/quran_android/issues/172)
